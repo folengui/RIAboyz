@@ -7,8 +7,10 @@ import math
 import time
 
 # Importamos las librerías de Robobo
-from robobo_framework.robobo import Robobo
-from robobosim_robot_https.robobo import Robobo as RoboboSim
+from robobopy.Robobo import Robobo
+from robobosim.RoboboSim import RoboboSim 
+from robobopy.utils.IR import IR
+
 
 # === CONSTANTES ===
 # Umbral de los sensores IR para considerar un choque
@@ -25,18 +27,36 @@ class RoboboEnv(gym.Env):
     """
     metadata = {'render_modes': ['human']}
 
-    def __init__(self, robobo_instance):
+    def __init__(self, robobo:Robobo,robobosim:RoboboSim, idrobot:int, idobject: str):
         super(RoboboEnv, self).__init__()
         
+        self.roboboID = idrobot
+        self.objectID = idobject
+
         # Guardamos la instancia de conexión con el robot
-        self.rob = robobo_instance
+        self.robobo = robobo
+        self.robobo.connect()
+
         # Creamos una instancia para usar las funciones específicas del simulador
-        self.robosim = RoboboSim(self.rob)
+        self.robosim = robobosim
+        self.robosim.connect()
+
+        self.locRobotinit = self.robosim.getRobotLocation(idrobot)
+        self.posRobotinit = self.locRobot["position"]
+        self.rotRobotinit = self.locRobot["rotation"]
+
+        #self.posRobotinitX = self.posRobot["x"]
+        #self.posRbotinitY = self.posRobot["y"]
+        #self.posRobotinitZ = self.posRobot["z"]
+
+        self.locObjectinit = self.robosim.getObjectLocation(idobject)
+        self.posObjectinit = self.locObject["position"]
+        self.rotObjectinit = self.locObject["rotation"]
+        #self.posObjectinitX = self.posObject["x"]
+        #self.posObjectinitY = self.posObject["y"]
+        #self.posObjectinitZ = self.posObject["z"]
 
         # === 1. Espacio de Acciones ===
-        # Definimos que la acción será un array de 2 valores continuos entre -1 y 1.
-        # action[0] -> Velocidad de la rueda izquierda
-        # action[1] -> Velocidad de la rueda derecha
         self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
 
         # === 2. Espacio de Observaciones ===
@@ -51,28 +71,30 @@ class RoboboEnv(gym.Env):
         # === 3. Variables Internas del Entorno ===
         self.current_step = 0
         self.previous_distance = 0.0
+        self.episode = 0
 
     def _get_obs(self):
         """
         Método privado para obtener la observación actual del simulador.
         """
         # --- Posición y Orientación ---
-        robot_pos = self.robosim.get_robot_position()
-        target_pos = self.robosim.get_object_position('Cylinder')
-        robot_orientation_rad = math.radians(self.rob.get_orientation().z)
+        robot_loc = self.robosim.getRobotLocation(self.roboboID)
+        robot_pos = robot_loc["position"]
+        robot_rot = robot_loc["rotation"]
+        target_loc = self.robosim.getObjectLocation(self.objectID)
+        target_pos = target_loc["position"]
 
         # --- Cálculo de Distancia y Ángulo ---
-        dist_to_target = math.sqrt((target_pos[0] - robot_pos['x'])**2 + (target_pos[2] - robot_pos['z'])**2)
-        angle_to_target_rad = math.atan2(target_pos[2] - robot_pos['z'], target_pos[0] - robot_pos['x'])
-        angle_diff = angle_to_target_rad - robot_orientation_rad
-        # Normalizamos el ángulo para que esté en el rango [-PI, PI]
-        angle_diff = (angle_diff + math.pi) % (2 * math.pi) - math.pi
+        dist_to_target = math.sqrt((target_pos["x"] - robot_pos["x"])**2 + (target_pos["y"] - robot_pos["y"])**2)
+
+        x_dist = robot_pos["x"] - target_pos["x"]
+        y_dist = robot_pos["y"] - target_pos["y"]
+        angle_diff = (np.arctan2(y_dist,x_dist) + np.pi) % (2*np.pi) - np.pi
 
         # --- Lectura de Sensores Infrarrojos ---
-        ir_readings = self.rob.readIRs()
-        ir_front_center = ir_readings['IR_F_C'].value or 0
-        ir_front_left = ir_readings['IR_F_L'].value or 0
-        ir_front_right = ir_readings['IR_F_R'].value or 0
+        ir_front_center = self.robobo.readIRSensor(IR.FrontC)
+        ir_front_left = self.robobo.readIRSensor(IR.FrontLL)
+        ir_front_right = self.robobo.readIRSensor(IR.FrontRR)
         
         # Devolvemos la observación como un array de NumPy
         return np.array([dist_to_target, angle_diff, ir_front_center, ir_front_left, ir_front_right], dtype=np.float32)
@@ -85,20 +107,16 @@ class RoboboEnv(gym.Env):
         
         # --- Reposicionamiento Aleatorio ---
         # Colocamos al robot y al cilindro en posiciones aleatorias para que el agente generalice
-        self.robosim.set_robot_position(np.random.uniform(-4, 4), 0, np.random.uniform(-4, 4))
-        self.robosim.set_robot_orientation(0, np.random.uniform(0, 360), 0)
-        self.robosim.set_object_position('Cylinder', np.random.uniform(-3, 3), 0.2, np.random.uniform(-3, 3))
-        
+        self.robosim.setRobotLocation(self.roboboID, self.posRobotinit, self.rotRobotinit)
+        self.robosim.setObjectLocation(self.objectID, self.posObjectinit,self.rotObjectinit)        
         self.current_step = 0
-        
+        self.episode += 1
+
         # Obtenemos la observación inicial
         observation = self._get_obs()
         self.previous_distance = observation[0]
         
-        # El diccionario 'info' puede devolver datos extra que no se usan para aprender
-        info = {'robot_pos': self.robosim.get_robot_position()}
-        
-        return observation, info
+        return observation
 
     def step(self, action):
         """
@@ -107,7 +125,6 @@ class RoboboEnv(gym.Env):
         self.current_step += 1
 
         # --- 1. Traducir y Ejecutar Acción ---
-        # Mapeamos la acción [-1, 1] a la velocidad de las ruedas [-100, 100]
         left_wheel_speed = int(action[0] * 100)
         right_wheel_speed = int(action[1] * 100)
         self.rob.moveWheels(left_wheel_speed, right_wheel_speed, 200) # Movemos por 0.2s

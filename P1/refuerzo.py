@@ -3,36 +3,41 @@ import numpy as np
 from gymnasium import spaces
 
 from robobopy.Robobo import Robobo
+from robobosim.RoboboSim import RoboboSim 
 
 rbb = Robobo('localhost')
 rbb.connect()
 
+sim = RoboboSim('localhost')
+sim.connect()   
 
-class CustomEnv(gym.Env):
-    """Custom Environment that follows gym interface."""
 
-    metadata = {"render_modes": ["human"], "render_fps": 30}
+#Devuelve lista de strings con IDS de los objetos
+objects = sim.getObjects()
+#Devuelve lista de ints con IDS de los robots
+robots = sim.getRobots()
 
-    def __init__(self, arg1, arg2):
-        super().__init__()
-        # Define action and observation space
-        # They must be gym.spaces objects
-        # Example when using discrete actions:
-        self.action_space = spaces.Discrete(N_DISCRETE_ACTIONS)
-        # Example for using image as input (channel-first; channel-last also works):
-        self.observation_space = spaces.Box(low=0, high=255,
-                                            shape=(N_CHANNELS, HEIGHT, WIDTH), dtype=np.uint8)
+for object in objects:
+    objeto = object
+    print(objeto)
+    #Devuelve un diccionario con : "position {"x","y","z"}" "rotation{"x","y","z"}"
+    locObjeto = sim.getObjectLocation(objeto)
+    print(f"Localizacion del cilindro: {locObjeto}")
 
-    def step(self, action):
-        ...
-        return observation, reward, terminated, truncated, info
+for robobo in robots:
+    robot = robobo
+    print(robot)
+    #Devuelve un diccionario con : "position {"x","y","z"}" "rotation{"x","y","z"}"
+    locRobot = sim.getRobotLocation(robot)
+    print(f"Localización robot: {locRobot}")
 
-    def reset(self, seed=None, options=None):
-        ...
-        return observation, info
 
-    def render(self):
-        ...
+rbb.moveWheels(10,10)
+rbb.wait(2)
+rbb.stopMotors()
 
-    def close(self):
-        ...
+pollas = rbb.readAllIRSensor()
+
+print(pollas)
+
+
