@@ -1,0 +1,8 @@
+﻿gymnasium==0.29.1
+stable-baselines3[extra]==2.3.0
+numpy==1.26.4
+pandas==2.2.2
+matplotlib==3.9.2
+seaborn==0.13.2
+robobopy==1.5.0
+robobosim==1.5.1
