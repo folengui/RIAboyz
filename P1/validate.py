@@ -1,13 +1,13 @@
 # Archivo: validate.py
 
-import robobo_framework
-from robobo_env import RoboboEnv
+from robobopy.Robobo import Robobo
+from env import RoboboEnv
 from stable_baselines3 import PPO
 import os
 import matplotlib.pyplot as plt
 
 # --- 1. CONFIGURACIÓN ---
-ROBOBO_IP = '127.0.0.1'
+ROBOBO_IP = 'localhost'
 MODEL_NAME = "ppo_robobo_final"
 MODELS_DIR = "models/"
 MODEL_PATH = os.path.join(MODELS_DIR, f"{MODEL_NAME}.zip")
@@ -15,7 +15,8 @@ EPISODIOS_DE_PRUEBA = 5
 
 # --- 2. CONEXIÓN Y CARGA ---
 print("Conectando con RoboboSim...")
-rob = robobo_framework.Robobo(ROBOBO_IP)
+rob = Robobo(ROBOBO_IP)
+rob.connect()
 env = RoboboEnv(rob)
 print(f"Cargando modelo desde: {MODEL_PATH}")
 model = PPO.load(MODEL_PATH, env=env)
@@ -62,4 +63,11 @@ for episode in range(EPISODIOS_DE_PRUEBA):
     # plt.show() # Descomentar si quieres ver la gráfica al momento
 
 # --- 5. CIERRE ---
-env.close()
+try:
+    env.close()
+finally:
+    # Asegurar cierre de la conexión con Robobo
+    try:
+        rob.disconnect()
+    except Exception:
+        pass
