@@ -10,6 +10,7 @@ import time
 from robobopy.Robobo import Robobo
 from robobosim.RoboboSim import RoboboSim 
 from robobopy.utils.IR import IR
+from robobopy.utils.Color import Color
 
 
 # === CONSTANTES ===
@@ -18,7 +19,17 @@ IR_COLLISION_THRESHOLD = 400
 # Distancia objetivo para considerar que el robot ha llegado
 GOAL_DISTANCE_THRESHOLD = 0.5
 # Máximo de pasos por episodio
-MAX_EPISODE_STEPS = 750
+MAX_EPISODE_STEPS = 100
+
+ACTIONS = [
+    (10,10,1),     #Continua recto 1s
+    (10,10,0.5),   #Continua recto 0.5s
+    (10,0,0.5),    #Gira izquierda poco
+    (0,10,0.5),    #Gira derecha poco
+    (10,0,1),    #Gira izquierda mucho
+    (0,10,1)     #Gira derecha mucho
+
+]
 
 class RoboboEnv(gym.Env):
     """
@@ -32,72 +43,60 @@ class RoboboEnv(gym.Env):
         
         self.roboboID = idrobot
         self.objectID = idobject
+        self.objectColor = Color.RED
 
         # Guardamos la instancia de conexión con el robot
         self.robobo = robobo
         self.robobo.connect()
+        self.robobo.moveTiltTo(90,5,True)
 
         # Creamos una instancia para usar las funciones específicas del simulador
         self.robosim = robobosim
         self.robosim.connect()
 
         self.locRobotinit = self.robosim.getRobotLocation(idrobot)
-        self.posRobotinit = self.locRobot["position"]
-        self.rotRobotinit = self.locRobot["rotation"]
+        self.posRobotinit = self.locRobotinit["position"]
+        self.rotRobotinit = self.locRobotinit["rotation"]
 
         #self.posRobotinitX = self.posRobot["x"]
         #self.posRbotinitY = self.posRobot["y"]
         #self.posRobotinitZ = self.posRobot["z"]
 
         self.locObjectinit = self.robosim.getObjectLocation(idobject)
-        self.posObjectinit = self.locObject["position"]
-        self.rotObjectinit = self.locObject["rotation"]
+        self.posObjectinit = self.locObjectinit["position"]
+        self.rotObjectinit = self.locObjectinit["rotation"]
         #self.posObjectinitX = self.posObject["x"]
         #self.posObjectinitY = self.posObject["y"]
         #self.posObjectinitZ = self.posObject["z"]
 
         # === 1. Espacio de Acciones ===
-        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
+        self.action_space = spaces.Discrete(len(ACTIONS))
+        self.posX_blob_before = 0
+        self.size_blob_before = 0
 
         # === 2. Espacio de Observaciones ===
-        # Definimos lo que el agente "ve". Un array de 5 valores continuos:
+        # Definimos lo que el agente "ve". Un array de 2 valores continuos:
         # obs[0] -> Distancia al objetivo
         # obs[1] -> Ángulo hacia el objetivo
-        # obs[2] -> Valor del sensor IR Frontal Central
-        # obs[3] -> Valor del sensor IR Frontal Izquierdo
-        # obs[4] -> Valor del sensor IR Frontal Derecho
-        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(5,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(2,), dtype=np.float32)
 
         # === 3. Variables Internas del Entorno ===
         self.current_step = 0
         self.previous_distance = 0.0
         self.episode = 0
+        self.reward_history = []
 
     def _get_obs(self):
         """
         Método privado para obtener la observación actual del simulador.
         """
-        # --- Posición y Orientación ---
-        robot_loc = self.robosim.getRobotLocation(self.roboboID)
-        robot_pos = robot_loc["position"]
-        robot_rot = robot_loc["rotation"]
-        target_loc = self.robosim.getObjectLocation(self.objectID)
-        target_pos = target_loc["position"]
+        blob = self.robobo.readColorBlob(self.objectColor)
 
-        # --- Cálculo de Distancia y Ángulo ---
-        dist_to_target = math.sqrt((target_pos["x"] - robot_pos["x"])**2 + (target_pos["y"] - robot_pos["y"])**2)
+        size = blob.size
+        pos_x = blob.posx
 
-        x_dist = robot_pos["x"] - target_pos["x"]
-        y_dist = robot_pos["y"] - target_pos["y"]
-        angle_diff = (np.arctan2(y_dist,x_dist) + np.pi) % (2*np.pi) - np.pi
-
-        # --- Lectura de Sensores Infrarrojos ---
-        ir_front_center = self.robobo.readIRSensor(IR.FrontC)
-        ir_front_left = self.robobo.readIRSensor(IR.FrontLL)
-        ir_front_right = self.robobo.readIRSensor(IR.FrontRR)
-        
         # Devolvemos la observación como un array de NumPy
-        return np.array([dist_to_target, angle_diff, ir_front_center, ir_front_left, ir_front_right], dtype=np.float32)
+        return np.array([size, pos_x], dtype=np.float32)
 
     def reset(self, seed=None, options=None):
         """
@@ -109,14 +108,17 @@ class RoboboEnv(gym.Env):
         # Colocamos al robot y al cilindro en posiciones aleatorias para que el agente generalice
         self.robosim.setRobotLocation(self.roboboID, self.posRobotinit, self.rotRobotinit)
         self.robosim.setObjectLocation(self.objectID, self.posObjectinit,self.rotObjectinit)        
+        self.robobo.moveTiltTo(90,5,True)
         self.current_step = 0
         self.episode += 1
 
         # Obtenemos la observación inicial
         observation = self._get_obs()
         self.previous_distance = observation[0]
-        
-        return observation
+        info = {"position": self.robosim.getRobotLocation(self.roboboID)["position"]}
+        print("RESETING EPISODE...........")
+        print(f"Num steps: {self.step}    Mean reward: {np.mean(self.reward_history)}")
+        return observation, info
 
     def step(self, action):
         """
@@ -125,52 +127,51 @@ class RoboboEnv(gym.Env):
         self.current_step += 1
 
         # --- 1. Traducir y Ejecutar Acción ---
-        left_wheel_speed = int(action[0] * 100)
-        right_wheel_speed = int(action[1] * 100)
-        self.rob.moveWheels(left_wheel_speed, right_wheel_speed, 200) # Movemos por 0.2s
+        rw, lw, duration = ACTIONS[action]
+        self.robobo.moveWheelsByTime(rw, lw, duration) # Movemos por 0.2s
         
         # --- 2. Obtener Nueva Observación ---
         observation = self._get_obs()
-        dist_now = observation[0]
-        ir_c, ir_l, ir_r = observation[2], observation[3], observation[4]
+        size_blob_now = observation[0]
+        posX_blob_now = observation[1]
 
         # --- 3. Calcular la Recompensa ---
         reward = 0
         terminated = False # Por defecto, el episodio no termina
 
         # Recompensa por acercarse: la diferencia de distancias
-        reward = (self.previous_distance - dist_now) * 10
+        reward =   (np.abs(self.posX_blob_before - 50) - np.abs(posX_blob_now - 50))
+        reward = size_blob_now + (size_blob_now - self.size_blob_before) 
 
-        # Penalización pequeña por cada paso para incentivar la rapidez
-        reward -= 0.1
+        # Actualizamos los blobs para el siguiente paso
+        self.posX_blob_before = posX_blob_now
+        self.size_blob_before = size_blob_now
+
 
         # Penalización grande por chocar
-        if ir_c > IR_COLLISION_THRESHOLD or ir_l > IR_COLLISION_THRESHOLD or ir_r > IR_COLLISION_THRESHOLD:
-            reward = -200
+        if self.robobo.readIRSensor(IR.FrontC) > IR_COLLISION_THRESHOLD or self.robobo.readIRSensor(IR.FrontLL) > IR_COLLISION_THRESHOLD or self.robobo.readIRSensor(IR.FrontRR) > IR_COLLISION_THRESHOLD:
             terminated = True
             print("¡Colisión!")
-
-        # Recompensa grande por llegar al objetivo
-        if dist_now < GOAL_DISTANCE_THRESHOLD:
-            reward = 300
-            terminated = True
-            print("¡Objetivo alcanzado!")
 
         # --- 4. Comprobar Fin de Episodio por Tiempo ---
         if self.current_step >= MAX_EPISODE_STEPS:
             terminated = True
             print("Tiempo agotado.")
 
-        # Actualizamos la distancia previa para el siguiente paso
-        self.previous_distance = dist_now
-        
         # Devolvemos la información
-        info = {'robot_pos': self.robosim.get_robot_position()}
+        info = {'robot_pos': self.robosim.getRobotLocation(self.roboboID)["position"]}
+
+        self.reward_history.append(reward)
+
+        print(f"Episode-step: {self.episode}-{self.step} Observation: {observation}  Reward: {reward}   Terminated: {terminated}  ")
+
         return observation, reward, terminated, False, info # El 'False' es por 'truncated'
 
     def close(self):
         """
         Limpia el entorno al finalizar.
         """
-        self.rob.stop()
+        self.robobo.stopMotors()
+        self.robobo.disconnect()
+        self.robosim.disconnect()
         print("Entorno cerrado.")

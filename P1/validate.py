@@ -1,6 +1,7 @@
 # Archivo: validate.py
 
 from robobopy.Robobo import Robobo
+from robobosim.RoboboSim import RoboboSim 
 from env import RoboboEnv
 from stable_baselines3 import PPO
 import os
@@ -16,8 +17,10 @@ EPISODIOS_DE_PRUEBA = 5
 # --- 2. CONEXIÓN Y CARGA ---
 print("Conectando con RoboboSim...")
 rob = Robobo(ROBOBO_IP)
-rob.connect()
-env = RoboboEnv(rob)
+rbsim = RoboboSim(ROBOBO_IP)
+idrobot = 0
+idobject = "CYLINDERMIDBALL"
+env = RoboboEnv(rob,rbsim,idrobot,idobject)
 print(f"Cargando modelo desde: {MODEL_PATH}")
 model = PPO.load(MODEL_PATH, env=env)
 
@@ -29,10 +32,12 @@ for episode in range(EPISODIOS_DE_PRUEBA):
     done = False
     
     # Listas para guardar la trayectoria
-    robot_path_x = [info['robot_pos']['x']]
-    robot_path_z = [info['robot_pos']['z']]
+    robot_path_x = []
+    robot_path_x.append(info["position"]["x"])
+    robot_path_y = []
+    robot_path_y.append(info["position"]["y"])
     # La posición del objetivo no cambia en el episodio
-    target_pos = env.robosim.get_object_position('Cylinder')
+    target_pos = env.robosim.getObjectLocation(idobject)
 
     while not done:
         # Usamos deterministic=True para que el agente no explore, sino que elija la mejor acción
@@ -41,18 +46,19 @@ for episode in range(EPISODIOS_DE_PRUEBA):
         
         # Guardamos la posición actual para la gráfica
         robot_path_x.append(info['robot_pos']['x'])
-        robot_path_z.append(info['robot_pos']['z'])
+        robot_path_y.append(info['robot_pos']['z'])
 
     print(f"Episodio {episode + 1} finalizado.")
 
     # --- 4. VISUALIZACIÓN DE LA TRAYECTORIA ---
+    """
     plt.figure(figsize=(8, 8))
-    plt.plot(robot_path_x, robot_path_z, marker='o', linestyle='-', label='Trayectoria del Robot')
-    plt.scatter([robot_path_x[0]], [robot_path_z[0]], s=150, c='green', label='Inicio Robot', zorder=5)
+    plt.plot(robot_path_x, robot_path_y, marker='o', linestyle='-', label='Trayectoria del Robot')
+    plt.scatter([robot_path_x[0]], [robot_path_y[0]], s=150, c='green', label='Inicio Robot', zorder=5)
     plt.scatter([target_pos[0]], [target_pos[2]], s=150, c='red', marker='X', label='Objetivo', zorder=5)
     plt.title(f'Trayectoria del Robot - Episodio {episode + 1}')
     plt.xlabel('Coordenada X')
-    plt.ylabel('Coordenada Z')
+    plt.ylabel('Coordenada Y')
     plt.xlim(-5, 5)
     plt.ylim(-5, 5)
     plt.grid(True)
@@ -61,8 +67,8 @@ for episode in range(EPISODIOS_DE_PRUEBA):
     plt.savefig(f"trayectoria_episodio_{episode + 1}.png")
     print(f"Gráfica de la trayectoria guardada como 'trayectoria_episodio_{episode + 1}.png'")
     # plt.show() # Descomentar si quieres ver la gráfica al momento
-
-# --- 5. CIERRE ---
+"""
+    # --- 5. CIERRE ---
 try:
     env.close()
 finally:
