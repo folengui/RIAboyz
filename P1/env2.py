@@ -28,6 +28,32 @@ ACTIONS = [
     (-10, 10, 1.0),
 ]
 
+import matplotlib.pyplot as plt
+
+def plot_rewards_bars(rewards, title="Recompensa por paso",
+                      figsize=(10, 4), filename=None, show=True, stride_xticks=1):
+    steps = list(range(1, len(rewards) + 1))
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.bar(steps, rewards)
+
+    ax.set_title(title)
+    ax.set_xlabel("Paso")
+    ax.set_ylabel("Recompensa")
+    ax.grid(True, axis='y', alpha=0.3)
+
+    # Reducir densidad de etiquetas si hay muchos pasos
+    if stride_xticks > 1:
+        ax.set_xticks(steps[::stride_xticks])
+    elif len(steps) > 50:
+        ax.set_xticks(steps[::max(1, len(steps)//20)])
+
+    if filename:
+        fig.savefig(filename, bbox_inches="tight", dpi=150)
+    if show:
+        plt.show()
+    return fig, ax
+
 logger = logging.getLogger(__name__)
 
 class RoboboEnv(gym.Env):
@@ -96,6 +122,11 @@ class RoboboEnv(gym.Env):
         self.posX_blob_before = float(obs[1])
 
         info = {"position": self.robosim.getRobotLocation(self.roboboID)["position"]}
+        print("RESETING EPISODE...........")
+        print(f"Num steps: {self.step}    Mean reward: {np.mean(self.reward_history)}")
+
+        plot_rewards_bars(self.reward_history)
+        self.reward_history = []
         return obs, info
 
     def step(self, action):
@@ -153,6 +184,7 @@ class RoboboEnv(gym.Env):
         }
 
         self.reward_history.append(reward)
+        print(f"Episode-step: {self.episode}-{self.step} Observation: {obs}  Reward: {reward}   Terminated: {terminated}  ")
         return obs, float(reward), terminated, truncated, info
 
     def render(self):
