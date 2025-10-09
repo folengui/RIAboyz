@@ -1,10 +1,8 @@
-# robobo_env_basic.py — v1
-# - Conexión robusta (SIM -> esperar estado -> ROBOBO)
-# - Copias profundas de poses iniciales (el cilindro SÍ resetea)
-# - Auto-escalado de distancia (mm/cm -> "metros lógicos")
-# - Recompensa con progreso (distancia y ángulo)
-# - D_MAX efectivo por episodio (anti-saturación)
-# - Telemetría útil en info e impresión fin de episodio
+# robobo_env_basic.py — v1.1
+# Cambios vs v1:
+#  - Recompensa base usa d_norm (acotado) en vez de d/D_used
+#  - Suelo de D_used (episode_d_max) = 2.0
+#  - Clip de reward total [-5, 5] para evitar outliers
 
 import time
 import copy
@@ -21,7 +19,7 @@ MAX_STEPS = 150
 
 # Recompensa base (suave): estado absoluto (no-progreso)
 W_THETA_BASE = 0.3      # peso ángulo (|θ|/π)
-W_DIST_BASE  = 0.7      # peso distancia (d/D)
+W_DIST_BASE  = 0.7      # peso distancia (d_norm)
 
 # Recompensa de progreso entre pasos
 PROG_D   = 1.0          # premio por reducción de distancia
@@ -137,7 +135,7 @@ class RoboboEnvBasic(gym.Env):
         self.sim.setObjectLocation(self.object_id, self.obj_pos0, self.obj_rot0)
 
         # Detecta escala de distancia según d_raw inicial
-        d0_raw, _ = self._pose_rel_raw()
+        d0_raw, theta0 = self._pose_rel_raw()
         if d0_raw > 1000.0:
             self._dist_scale = 0.001   # mm -> m
         elif d0_raw > 10.0:
@@ -146,9 +144,9 @@ class RoboboEnvBasic(gym.Env):
             self._dist_scale = 1.0     # ya en m
         print(f"[RoboboEnvBasic] Escala de distancia = {self._dist_scale} (d0_raw={d0_raw:.1f})")
 
-        # D efectivo del episodio: evita saturación (20% sobre d0; mínimo 0.5)
-        d0_m, theta0 = self._pose_rel()
-        self._episode_d_max = max(d0_m * 1.2, 0.5)
+        # D efectivo del episodio: evita saturación (20% sobre d0; mínimo 2.0)
+        d0_m = d0_raw * self._dist_scale
+        self._episode_d_max = max(d0_m * 1.2, 2.0)
 
         # Reset de estado episodio
         self.steps = 0
@@ -172,16 +170,15 @@ class RoboboEnvBasic(gym.Env):
 
         # Lee estado y normaliza con el D del episodio
         d, theta = self._pose_rel()
-        D_used = self._episode_d_max if self._episode_d_max is not None else D_MAX
+        D_used = self._episode_d_max if self._episode_d_max is not None else max(D_MAX, 2.0)
         obs, d_norm, theta_norm = self._obs_from(d, theta, D_used)
 
         # -------- Recompensa --------
         abs_th = abs(theta)
 
-        # (1) Termino base (estado absoluto, suave)
-        reward = (W_THETA_BASE * (-(abs_th/np.pi)) +
-                  W_DIST_BASE  * (-(d / max(D_used, 1e-6))))
-        reward = float(reward)
+        # (1) Termino base (estado absoluto, ACOTADO: usa d_norm)
+        reward = (W_THETA_BASE * (-(abs_th / np.pi)) +
+                  W_DIST_BASE  * ( -d_norm ))
 
         # (2) Progreso desde el paso anterior
         if self._prev_d is not None:
@@ -191,6 +188,9 @@ class RoboboEnvBasic(gym.Env):
 
         # (3) Coste temporal
         reward -= STEP_PEN
+
+        # Clip anti-outliers
+        reward = float(np.clip(reward, -5.0, 5.0))
 
         # Actualiza previos
         self._prev_d = d
@@ -223,7 +223,7 @@ class RoboboEnvBasic(gym.Env):
                   f"d={info['d']}, theta={info['theta_deg']}°, goal={goal}, "
                   f"D_used={info['episode_d_max']}, scale={self._dist_scale}")
 
-        return obs, float(reward), terminated, truncated, info
+        return obs, reward, terminated, truncated, info
 
     def close(self):
         try:
