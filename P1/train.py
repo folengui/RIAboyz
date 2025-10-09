@@ -1,6 +1,6 @@
 # Archivo: tra
 from robobopy.Robobo import Robobo
-from env import RoboboEnv
+from env2 import RoboboEnv
 from robobosim.RoboboSim import RoboboSim 
 from stable_baselines3 import PPO
 import os
@@ -14,7 +14,7 @@ MODEL_NAME = "ppo_robobo_final"
 LOGS_DIR = "logs/"
 MODELS_DIR = "models/"
 # Pasos totales de entrenamiento
-TOTAL_TIMESTEPS = 20
+TOTAL_TIMESTEPS = 2000
 
 os.makedirs(LOGS_DIR, exist_ok=True)
 os.makedirs(MODELS_DIR, exist_ok=True)

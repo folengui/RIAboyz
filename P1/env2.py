@@ -67,7 +67,7 @@ class RoboboEnv(gym.Env):
 
         self.robobo = robobo
         self.robobo.connect()
-        self.robobo.moveTiltTo(90, 5, True)
+        self.robobo.moveTiltTo(120, 5, True)
 
         self.robosim = robobosim
         self.robosim.connect()
@@ -112,7 +112,7 @@ class RoboboEnv(gym.Env):
         # Recolocación (puedes randomizar con self.np_random si quieres)
         self.robosim.setRobotLocation(self.roboboID, self.posRobotinit, self.rotRobotinit)
         self.robosim.setObjectLocation(self.objectID, self.posObjectinit, self.rotObjectinit)
-        self.robobo.moveTiltTo(90, 5, True)
+        self.robobo.moveTiltTo(120, 5, True)
 
         self.current_step = 0
         self.episode += 1
@@ -145,9 +145,12 @@ class RoboboEnv(gym.Env):
         # + progreso al acercarse (aumento de size)
         # + centrado (menor |posx-CENTER_X|)
         # ----------------
-        delta_size = (size_now - self.size_blob_before)
-        delta_center = abs(self.posX_blob_before - CENTER_X) - abs(posx_now - CENTER_X)
-        reward = 0.001 * delta_size + 0.01 * delta_center
+        delta_size = size_now + (size_now - self.size_blob_before)
+        delta_center = posx_now + abs(self.posX_blob_before - CENTER_X) - abs(posx_now - CENTER_X)
+        if delta_center == 0 and delta_size == 0:
+            reward = -1
+        else:
+            reward = 1 + 0.001 * delta_size + 0.01 * delta_center
 
         # Actualiza para el próximo paso
         self.size_blob_before = size_now
