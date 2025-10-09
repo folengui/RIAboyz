@@ -14,7 +14,7 @@ MODEL_NAME = "ppo_robobo_final"
 LOGS_DIR = "logs/"
 MODELS_DIR = "models/"
 # Pasos totales de entrenamiento
-TOTAL_TIMESTEPS = 2000
+TOTAL_TIMESTEPS = 20000
 
 os.makedirs(LOGS_DIR, exist_ok=True)
 os.makedirs(MODELS_DIR, exist_ok=True)
