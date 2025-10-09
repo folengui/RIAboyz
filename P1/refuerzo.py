@@ -1,6 +1,3 @@
-import gymnasium as gym
-import numpy as np
-from gymnasium import spaces
 
 from robobopy.Robobo import Robobo
 from robobosim.RoboboSim import RoboboSim 
