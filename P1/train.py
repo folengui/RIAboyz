@@ -9,7 +9,7 @@ import os
 # IP del simulador (si está en la misma máquina, es '127.0.0.1')
 ROBOBO_IP = 'localhost'
 # Nombre para guardar los logs y el modelo
-MODEL_NAME = "ppo_robobo_final"
+MODEL_NAME = "ppo_robobo_final2"
 # Directorios para guardar logs y modelos
 LOGS_DIR = "logs/"
 MODELS_DIR = "models/"

@@ -14,27 +14,14 @@ objects = sim.getObjects()
 #Devuelve lista de ints con IDS de los robots
 robots = sim.getRobots()
 
+
+pos = {"x": 0, "y": 0, "z":0}
 for object in objects:
     objeto = object
     print(objeto)
     #Devuelve un diccionario con : "position {"x","y","z"}" "rotation{"x","y","z"}"
-    locObjeto = sim.getObjectLocation(objeto)
-    print(f"Localizacion del cilindro: {locObjeto}")
+    rotoOB = sim.getObjectLocation(objeto)["position"]
+    sim.setObjectLocation(objeto,pos,rotoOB)
 
-for robobo in robots:
-    robot = robobo
-    print(robot)
-    #Devuelve un diccionario con : "position {"x","y","z"}" "rotation{"x","y","z"}"
-    locRobot = sim.getRobotLocation(robot)
-    print(f"Localización robot: {locRobot}")
-
-
-rbb.moveWheels(10,10)
-rbb.wait(2)
-rbb.stopMotors()
-
-pollas = rbb.readAllIRSensor()
-
-print(pollas)
 
 
