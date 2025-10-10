@@ -13,24 +13,24 @@ from robobopy.utils.Color import Color
 #VARIABLES GLOBALES 
 IR_COLLISION_THRESHOLD = 400
 MAX_EPISODE_STEPS = 100
+SIZE_SAW_CYLINDER_THRESHOLD = 1.0
+SIZE_VISIBLE_MIN = 1.0
+IR_SUCCESS_THRESHOLD = 500
+MAX_STEPS_WITHOUT_VISION = 3
+
 
 # Variables globales del robot
-SIZE_MAX = 20000.0  # tamaño de blob máximo razonable
+SIZE_MAX = 600.0  # tamaño de blob máximo razonable
 POSX_MAX = 100.0    # posx suele ser [0,100]; ajusta si es distinto
 CENTER_X = 50.0     # centro del campo de visión
-GOAL_SIZE_THRESHOLD = 15000.0  # “suficientemente cerca” del cilindro
-GOAL_POSX_MARGIN = 10.0        # centrado aceptable
 
 #CONJUNTO DE ACCIONES 
 ACTIONS = [
-    (10, 10, 1.0),
-    (10, 10, 0.5),
-    (10, -10, 0.5),
-    (-10, 10, 0.5),
-    (10, -10, 1.0),
-    (-10, 10, 1.0),
+    (10, 10, 0.5),   # 0: Avanzar
+    (10, -10, 0.3),  # 1: Girar derecha
+    (-10, 10, 0.3),  # 2: Girar izquierda
+    (5, 5, 0.5),     # 3: Avanzar lento
 ]
-
 
 #Representar la evolución de las recompensas tras cada episodio
 def plot_rewards_bars(rewards, title="Recompensa por paso",
@@ -98,10 +98,14 @@ class RoboboEnv(gym.Env):
         self.episode = 0
         self.reward_history = []
 
-        self.ARENA = (-400,400)
+        self.ARENA = (-100,300)
 
         self.size_blob_before = 0.0
-        self.posX_blob_before = CENTER_X  # centro como neutro inicial
+        self.posX_blob_before = CENTER_X  
+        self.last_action = None
+        self.action_repeat_count = 0
+        self.recently_saw_cylinder = False
+        self.steps_since_saw_cylinder = 999
 
     def _get_obs(self):
         blob = self.robobo.readColorBlob(self.objectColor)
@@ -148,53 +152,135 @@ class RoboboEnv(gym.Env):
 
         # Nueva observación
         obs = self._get_obs()
-        size_now, posx_now = float(obs[0]), float(obs[1])
+        size_norm, posx_norm = float(obs[0]), float(obs[1])
+        size_now = size_norm * SIZE_MAX
+        posx_now = posx_norm * POSX_MAX
+        ir_front = self.robobo.readIRSensor(IR.FrontC)
 
-        #Calculo de recompensa
-        delta_size = size_now + (size_now - self.size_blob_before)
-        delta_center = posx_now + abs(self.posX_blob_before - CENTER_X) - abs(posx_now - CENTER_X)
-        if delta_center == 0 and delta_size == 0:
-            reward = -1
+        if size_now > SIZE_SAW_CYLINDER_THRESHOLD:
+            self.recently_saw_cylinder = True
+            self.steps_since_saw_cylinder = 0
         else:
-            reward = 1 + 0.001 * delta_size + 0.01 * delta_center
+            self.steps_since_saw_cylinder += 1
+            if self.steps_since_saw_cylinder > MAX_STEPS_WITHOUT_VISION:
+                self.recently_saw_cylinder = False
 
-        # Actualiza para el próximo paso
+        reward = 0.0
+       
+        # 1. Recompensa por acercarse (MÁS GENEROSA)
+        delta_size = size_now - self.size_blob_before
+        if delta_size > 0:
+            reward += 2.0 * (delta_size / SIZE_MAX)  # 2x en lugar de 1x
+        elif delta_size < 0:
+            reward -= 0.2 * (abs(delta_size) / SIZE_MAX)  # 0.2x en lugar de 0.3x
+       
+        # 2. Recompensa por centrado (MÁS GENEROSA)
+        if size_now >= SIZE_VISIBLE_MIN and self.size_blob_before >= SIZE_VISIBLE_MIN:
+            dist_to_center_now = abs(posx_now - CENTER_X)
+            dist_to_center_before = abs(self.posX_blob_before - CENTER_X)
+            delta_centering = dist_to_center_before - dist_to_center_now
+           
+            if delta_centering > 0:
+                reward += 0.5 * (delta_centering / CENTER_X)  # 0.5x en lugar de 0.3x
+            elif delta_centering < 0:
+                reward -= 0.1 * (abs(delta_centering) / CENTER_X)  # 0.1x en lugar de 0.15x
+       
+        # 3. Bonus por proximidad (MÁS GENEROSO)
+        if ir_front > 50 and self.recently_saw_cylinder:
+            reward += 1.0  # 1.0 en lugar de 0.5
+       
+        # 4. Bonus por ver el cilindro (NUEVO - incentiva encontrarlo)
+        if size_now > SIZE_SAW_CYLINDER_THRESHOLD:
+            reward += 0.1  # Pequeño bonus continuo por verlo
+ 
+                # ==================== PENALIZACIÓN FUERTE POR PERDER DE VISTA ====================
+        # Esta es la nueva lógica que pediste
+        if size_now < SIZE_VISIBLE_MIN and self.size_blob_before >= SIZE_VISIBLE_MIN:
+            # ❌ PERDIÓ EL CILINDRO DE VISTA (antes lo veía, ahora no)
+           
+            # Distinguir si es porque está MUY cerca (IR alto = normal)
+            # o porque hizo un mal movimiento (IR bajo = error)
+            if ir_front > 100:
+                # Está tocándolo, es normal no verlo
+                # NO penalizamos (o penalización muy leve)
+                reward -= 0
+                print(f"  ⚠️  Perdió visión pero está tocando (IR={ir_front})")
+ 
+            else:
+                # Está lejos, hizo un MAL movimiento
+                reward -= 3.0  # ← PENALIZACIÓN FUERTE
+                print(f"  ❌❌ PERDIÓ VISIÓN DEL CILINDRO (IR={ir_front}) - PENALIZACIÓN FUERTE")
+       
+        # 5. Penalización MUY SUAVE por no ver nada
+        if size_now < SIZE_VISIBLE_MIN and ir_front < 300:
+            reward -= 0.005  # Muy suave, solo para fomentar búsqueda
+       
+       
+        self.last_action = action
         self.size_blob_before = size_now
         self.posX_blob_before = posx_now
-
-        # Eventos de terminación
+ 
+        # ==================== CONDICIONES DE TERMINACIÓN ====================
         terminated = False
         truncated = False
-
-        # Colisión (si decides tratarla como final de episodio)
-        collided = (
-            self.robobo.readIRSensor(IR.FrontC) > IR_COLLISION_THRESHOLD or
+ 
+        # Éxito
+        goal_reached = (
+            ir_front > IR_SUCCESS_THRESHOLD and
+            self.recently_saw_cylinder and
+            self.steps_since_saw_cylinder <= 3
+        )
+       
+        if goal_reached:
+            terminated = True
+            reward = 30.0  # 30 en lugar de 20 (más generoso)
+            print(f"🎯 ¡OBJETIVO ALCANZADO! IR={ir_front}")
+ 
+        # Colisión
+        collided_obstacle = (
             self.robobo.readIRSensor(IR.FrontLL) > IR_COLLISION_THRESHOLD or
             self.robobo.readIRSensor(IR.FrontRR) > IR_COLLISION_THRESHOLD
         )
-        if collided:
+       
+       
+        if collided_obstacle:
             terminated = True
-            reward -= 1.0  # penaliza fuerte la colisión
-
-        # Objetivo alcanzado: cerca y centrado
-        goal_reached = (size_now >= GOAL_SIZE_THRESHOLD) and (abs(posx_now - CENTER_X) <= GOAL_POSX_MARGIN)
-        if goal_reached:
-            terminated = True
-            reward += 2.0
-
-        # Límite de pasos → truncated
+            reward = -5.0  # -5 en lugar de -10 (menos punitivo)
+ 
+        # Límite de pasos
         if self.current_step >= MAX_EPISODE_STEPS:
-            terminated = True
             truncated = True
-
+            terminated = True
+            # Bonus generoso si está cerca al acabar
+            if ir_front > 200 and self.recently_saw_cylinder:
+                reward += 5.0  # 5.0 en lugar de 2.0
+ 
+        # Info
         info = {
             "robot_pos": self.robosim.getRobotLocation(self.roboboID)["position"],
             "goal_reached": goal_reached,
-            "collided": collided
+            "collided": collided_obstacle,
+            "size": size_now,
+            "ir_front": ir_front,
+            "saw_cylinder": self.recently_saw_cylinder,
+            "steps_since_saw": self.steps_since_saw_cylinder,
+            "centered": abs(posx_now - CENTER_X) if size_now >= SIZE_VISIBLE_MIN else -1,
+            "delta_size": delta_size,
+            "action_repeats": self.action_repeat_count
         }
-
+ 
         self.reward_history.append(reward)
-        print(f"Episode-step: {self.episode}-{self.current_step} Observation: {obs}  Reward: {reward}   Terminated: {terminated}  ")
+       
+        # Print periódico
+        if self.current_step % 10 == 0 or terminated or truncated:
+            status = "✓GOAL" if goal_reached else ("✗CRASH" if collided_obstacle else "...")
+            dist_str = f"{abs(posx_now - CENTER_X):4.1f}" if size_now >= SIZE_VISIBLE_MIN else " N/A"
+            vision_indicator = f"👁️-{self.steps_since_saw_cylinder}" if self.recently_saw_cylinder else "❌"
+           
+            print(f"Ep{self.episode}-S{self.current_step:3d}: "
+                  f"size={size_now:5.0f}, IR={ir_front:4.0f}, dist={dist_str}, "
+                  f"vis={vision_indicator}, R={reward:+6.2f} {status}")
+       
         return obs, float(reward), terminated, truncated, info
 
 

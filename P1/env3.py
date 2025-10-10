@@ -122,6 +122,7 @@ class RoboboEnv(gym.Env):
         self.action_repeat_count = 0
         self.recently_saw_cylinder = False
         self.steps_since_saw_cylinder = 999
+        self.ARENA = (-300,300)
 
     def _get_obs(self):
         """Obtiene observación normalizada del entorno."""
@@ -147,7 +148,11 @@ class RoboboEnv(gym.Env):
         super().reset(seed=seed)
         
         self.robosim.setRobotLocation(self.roboboID, self.posRobotinit, self.rotRobotinit)
-        self.robosim.setObjectLocation(self.objectID, self.posObjectinit, self.rotObjectinit)
+        object_pos = {"x" : float(self.np_random.uniform(*self.ARENA)),
+                      "y" : self.posObjectinit["y"],
+                      "z" : float(self.np_random.uniform(*self.ARENA))
+                      }
+        self.robosim.setObjectLocation(self.objectID, object_pos , self.rotObjectinit)
         self.robobo.moveTiltTo(120, 5, True)
 
         self.current_step = 0
