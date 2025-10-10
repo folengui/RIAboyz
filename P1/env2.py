@@ -1,24 +1,27 @@
-# Archivo: robobo_env.py
+#Archivos y librerias importadas
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 import logging
+import matplotlib.pyplot as plt
 
 from robobopy.Robobo import Robobo
 from robobosim.RoboboSim import RoboboSim 
 from robobopy.utils.IR import IR
 from robobopy.utils.Color import Color
 
+#VARIABLES GLOBALES 
 IR_COLLISION_THRESHOLD = 400
 MAX_EPISODE_STEPS = 100
 
-# Heurísticos: ajusta a tu simulador
+# Variables globales del robot
 SIZE_MAX = 20000.0  # tamaño de blob máximo razonable
 POSX_MAX = 100.0    # posx suele ser [0,100]; ajusta si es distinto
 CENTER_X = 50.0     # centro del campo de visión
 GOAL_SIZE_THRESHOLD = 15000.0  # “suficientemente cerca” del cilindro
 GOAL_POSX_MARGIN = 10.0        # centrado aceptable
 
+#CONJUNTO DE ACCIONES 
 ACTIONS = [
     (10, 10, 1.0),
     (10, 10, 0.5),
@@ -28,8 +31,8 @@ ACTIONS = [
     (-10, 10, 1.0),
 ]
 
-import matplotlib.pyplot as plt
 
+#Representar la evolución de las recompensas tras cada episodio
 def plot_rewards_bars(rewards, title="Recompensa por paso",
                       figsize=(10, 4), filename=None, show=True, stride_xticks=1):
     steps = list(range(1, len(rewards) + 1))
@@ -95,6 +98,8 @@ class RoboboEnv(gym.Env):
         self.episode = 0
         self.reward_history = []
 
+        self.ARENA = (-400,400)
+
         self.size_blob_before = 0.0
         self.posX_blob_before = CENTER_X  # centro como neutro inicial
 
@@ -111,7 +116,12 @@ class RoboboEnv(gym.Env):
         super().reset(seed=seed)
         # Recolocación (puedes randomizar con self.np_random si quieres)
         self.robosim.setRobotLocation(self.roboboID, self.posRobotinit, self.rotRobotinit)
-        self.robosim.setObjectLocation(self.objectID, self.posObjectinit, self.rotObjectinit)
+
+        object_pos = {"x" : float(self.np_random.uniform(*self.ARENA)),
+                      "y" : self.posObjectinit["y"],
+                      "z" : float(self.np_random.uniform(*self.ARENA))
+                      }
+        self.robosim.setObjectLocation(self.objectID, object_pos , self.rotObjectinit)
         self.robobo.moveTiltTo(120, 5, True)
 
         self.current_step = 0
@@ -123,9 +133,9 @@ class RoboboEnv(gym.Env):
 
         info = {"position": self.robosim.getRobotLocation(self.roboboID)["position"]}
         print("RESETING EPISODE...........")
-        print(f"Num steps: {self.step}    Mean reward: {np.mean(self.reward_history)}")
+        print(f"Num steps: {self.current_step}    Mean reward: {np.mean(self.reward_history)}")
 
-        plot_rewards_bars(self.reward_history)
+        #plot_rewards_bars(self.reward_history)
         self.reward_history = []
         return obs, info
 
@@ -140,11 +150,7 @@ class RoboboEnv(gym.Env):
         obs = self._get_obs()
         size_now, posx_now = float(obs[0]), float(obs[1])
 
-        # ----------------
-        # Recompensa (simple y consistente):
-        # + progreso al acercarse (aumento de size)
-        # + centrado (menor |posx-CENTER_X|)
-        # ----------------
+        #Calculo de recompensa
         delta_size = size_now + (size_now - self.size_blob_before)
         delta_center = posx_now + abs(self.posX_blob_before - CENTER_X) - abs(posx_now - CENTER_X)
         if delta_center == 0 and delta_size == 0:
@@ -178,6 +184,7 @@ class RoboboEnv(gym.Env):
 
         # Límite de pasos → truncated
         if self.current_step >= MAX_EPISODE_STEPS:
+            terminated = True
             truncated = True
 
         info = {
@@ -187,12 +194,10 @@ class RoboboEnv(gym.Env):
         }
 
         self.reward_history.append(reward)
-        print(f"Episode-step: {self.episode}-{self.step} Observation: {obs}  Reward: {reward}   Terminated: {terminated}  ")
+        print(f"Episode-step: {self.episode}-{self.current_step} Observation: {obs}  Reward: {reward}   Terminated: {terminated}  ")
         return obs, float(reward), terminated, truncated, info
 
-    def render(self):
-        # opcional: integrar con visor del simulador si lo tienes
-        pass
+
 
     def close(self):
         try:
@@ -200,18 +205,3 @@ class RoboboEnv(gym.Env):
         finally:
             self.robobo.disconnect()
             self.robosim.disconnect()
-
-
-#Al igual util pa chekearlo
-# from stable_baselines3.common.env_checker import check_env
-# from stable_baselines3 import PPO  # o A2C/DQN según toque
-
-# env = RoboboEnv(robobo, robobosim, idrobot, idobject)
-# check_env(env, warn=True)  # te dirá si algo no cuadra
-
-# # (opcional) envolver con TimeLimit en vez de controlar dentro
-# # import gymnasium as gym
-# # env = gym.wrappers.TimeLimit(env, max_episode_steps=MAX_EPISODE_STEPS)
-
-# model = PPO("MlpPolicy", env, verbose=1)
-# model.learn(total_timesteps=50_000)
