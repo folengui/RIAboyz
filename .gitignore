@@ -1,0 +1,6 @@
+logs/
+models/
+Robotica/
+venv/
+.env/
+__pycache__
