@@ -1,56 +1,91 @@
 import neat
+import pickle
+import os
 import numpy as np
+from environment import RoboboEnv
 from robobopy.Robobo import Robobo
 from robobosim.RoboboSim import RoboboSim
-from environment import RoboboEnv
 
-# Crear entorno
-rob = Robobo("localhost")
-rbsim = RoboboSim("localhost")
-env = RoboboEnv(rob, rbsim, 0, "CYLINDERMIDBALL")
+# ⚙️ Inicialización del entorno
+MODELS_PATH = "RIABOYZ/P2/models/"
+IP_ENTORNO = 'localhost'
+robobo = Robobo(IP_ENTORNO)
+robobosim = RoboboSim(IP_ENTORNO)
+idrobot = 0
+idobject = "CYLINDERMIDBALL"
+env = RoboboEnv(robobo, robobosim, idrobot=idrobot, idobject=idobject)
 
-# Función de evaluación
+# 🎯 Función de evaluación de genomas
 def eval_genomes(genomes, config):
     for genome_id, genome in genomes:
         net = neat.nn.FeedForwardNetwork.create(genome, config)
         obs, info = env.reset()
-        done, trunc = False, False
-        total_reward = 0
+        total_reward = 0.0
+        done = False
+        step = 0
 
-        while not (done or trunc):
-            action = net.activate(obs)          # salida de la red
-            action = np.tanh(action)            # limitar a [-1, 1]
-            obs, reward, done, trunc, info = env.step(action)
+        while not done and step < 100:
+            # Red -> acción
+            output = net.activate(obs)
+            action = np.argmax(output)  # Acción con mayor salida
+
+            obs, reward, terminated, truncated, info = env.step(action)
+            done = terminated or truncated
             total_reward += reward
+            step += 1
 
         genome.fitness = total_reward
 
-# Configurar NEAT
-config_path = "config_neat.txt"  # ruta a tu archivo de configuración
-config = neat.Config(neat.DefaultGenome, neat.DefaultReproduction,
-                     neat.DefaultSpeciesSet, neat.DefaultStagnation,
-                     config_path)
+# 🧬 Función principal de entrenamiento
+def run_neat(config_file):
+    config = neat.Config(
+        neat.DefaultGenome,
+        neat.DefaultReproduction,
+        neat.DefaultSpeciesSet,
+        neat.DefaultStagnation,
+        config_file
+    )
 
-# Crear población
-pop = neat.Population(config)
-pop.add_reporter(neat.StdOutReporter(True))
-stats = neat.StatisticsReporter()
-pop.add_reporter(stats)
+    p = neat.Population(config)
+    p.add_reporter(neat.StdOutReporter(True))
+    stats = neat.StatisticsReporter()
+    p.add_reporter(stats)
 
-# Entrenar
-winner = pop.run(eval_genomes, n=50)  # 50 generaciones
+    # Entrenar durante N generaciones
+    winner = p.run(eval_genomes, 30)
 
-print("\nMejor red encontrada:")
-print(winner)
+    print("\n🏆 Mejor genoma encontrado:\n", winner)
+    return winner
 
-# Validar el mejor
-net = neat.nn.FeedForwardNetwork.create(winner, config)
-obs, info = env.reset()
-done, trunc = False, False
-while not (done or trunc):
-    action = np.tanh(net.activate(obs))
-    obs, reward, done, trunc, info = env.step(action)
+def save_winner(winner, config_path, save_dir):
 
-env.close()
-rob.disconnect()
-rbsim.disconnect()
+    os.makedirs(save_dir, exist_ok=True)
+
+ 
+    genome_path = os.path.join(save_dir, "winner_genome.pkl")
+    with open(genome_path, "wb") as f:
+        pickle.dump(winner, f)
+    print(f" Genoma guardado en: {genome_path}")
+
+
+    config = neat.Config(
+        neat.DefaultGenome,
+        neat.DefaultReproduction,
+        neat.DefaultSpeciesSet,
+        neat.DefaultStagnation,
+        config_path
+    )
+    net = neat.nn.FeedForwardNetwork.create(winner, config)
+
+    network_path = os.path.join(save_dir, "winner_network.pkl")
+    with open(network_path, "wb") as f:
+        pickle.dump(net, f)
+    print(f"Red neuronal guardada en: {network_path}")
+
+
+if __name__ == "__main__":
+    winner = run_neat("config.txt")
+    save_winner(winner, config_path="config.txt", save_dir=MODELS_PATH)
+
+
+    env.close()
