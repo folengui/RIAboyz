@@ -7,7 +7,7 @@ from robobopy.Robobo import Robobo
 from robobosim.RoboboSim import RoboboSim
 
 # ⚙️ Inicialización del entorno
-MODELS_PATH = "RIABOYZ/P2/models/"
+MODELS_PATH = "models/"
 IP_ENTORNO = 'localhost'
 robobo = Robobo(IP_ENTORNO)
 robobosim = RoboboSim(IP_ENTORNO)
