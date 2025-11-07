@@ -1,0 +1,23 @@
+digraph {
+	node [fontsize=9 height=0.2 shape=circle width=0.2]
+	"Blob Size
+Efectivo" [fillcolor=lightgray shape=box style=filled]
+	"Dist Centro" [fillcolor=lightgray shape=box style=filled]
+	"IR Front" [fillcolor=lightgray shape=box style=filled]
+	Recto [fillcolor=lightblue style=filled]
+	Izquierda [fillcolor=lightblue style=filled]
+	Derecha [fillcolor=lightblue style=filled]
+	39 [fillcolor=white style=filled]
+	26 [fillcolor=white style=filled]
+	"Blob Size
+Efectivo" -> Recto [color=red penwidth=0.3800818370455611 style=solid]
+	"Blob Size
+Efectivo" -> Izquierda [color=green penwidth=0.3099561084128118 style=solid]
+	"Blob Size
+Efectivo" -> Derecha [color=red penwidth=0.6000018941452685 style=solid]
+	"Dist Centro" -> Recto [color=red penwidth=0.5842237365737751 style=solid]
+	"IR Front" -> 26 [color=green penwidth=0.360424366226727 style=solid]
+	26 -> Izquierda [color=red penwidth=0.15257739568805723 style=solid]
+	"IR Front" -> 39 [color=green penwidth=0.5798561886086857 style=solid]
+	39 -> Derecha [color=red penwidth=0.25577747860397676 style=solid]
+}

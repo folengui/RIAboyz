@@ -177,7 +177,7 @@ def main():
     
     # Configuración
     ROBOBO_IP = 'localhost'
-    RESULTS_DIR = "results_neat_fast"  # Cambiado para usar resultados del entrenamiento rápido
+    RESULTS_DIR = "results"  # Cambiado para usar resultados del entrenamiento rápido
     GENOME_PATH = os.path.join(RESULTS_DIR, "best_genome.pkl")
     CONFIG_PATH = "config.txt"  # Usar la config del entrenamiento rápido
     VALIDATION_DIR = os.path.join(RESULTS_DIR, "validation")

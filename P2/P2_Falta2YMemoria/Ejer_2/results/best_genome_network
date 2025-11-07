@@ -1,0 +1,32 @@
+// Red Neuronal NEAT
+digraph {
+	rankdir=LR
+	node [fontsize=10 shape=circle style=filled]
+	subgraph cluster_inputs {
+		fontsize=12 fontweight=bold label=Inputs
+		color=lightgreen fillcolor=lightgreen style=filled
+		-1 [label="Blob Size
+Efectivo" fillcolor=lightgreen]
+		-2 [label="Dist Centro" fillcolor=lightgreen]
+		-3 [label="IR Front" fillcolor=lightgreen]
+	}
+	subgraph cluster_outputs {
+		fontsize=12 fontweight=bold label=Outputs
+		color=lightblue fillcolor=lightblue style=filled
+		0 [label=Recto fillcolor=lightblue]
+		1 [label=Izquierda fillcolor=lightblue]
+		2 [label=Derecha fillcolor=lightblue]
+	}
+	26 [label="Hidden
+26" fillcolor=lightyellow]
+	39 [label="Hidden
+39" fillcolor=lightyellow]
+	-1 -> 0 [label=-1.40 color=red fontsize=8 penwidth=1.4004091852278053]
+	-1 -> 1 [label=1.05 color=green fontsize=8 penwidth=1.049780542064059]
+	-1 -> 2 [label=-2.50 color=red fontsize=8 penwidth=2.5000094707263427]
+	-2 -> 0 [label=-2.42 color=red fontsize=8 penwidth=2.4211186828688755]
+	-3 -> 26 [label=1.30 color=green fontsize=8 penwidth=1.3021218311336353]
+	26 -> 1 [label=-0.26 color=red fontsize=8 penwidth=0.2628869784402862]
+	-3 -> 39 [label=2.40 color=green fontsize=8 penwidth=2.3992809430434283]
+	39 -> 2 [label=-0.78 color=red fontsize=8 penwidth=0.7788873930198837]
+}

@@ -46,7 +46,7 @@ def generate_all_visualizations():
     # 3. Configuración de red neuronal
     print("Generando topología de red neuronal...")
     node_names = {-1: 'IR Izq', -2: 'IR Centro', -3: 'IR Der',
-                  0: 'Vel Izq', 1: 'Vel Der', 2: 'Detectar'}
+                  0: 'Accion 0', 1: 'Accion 1', 2: 'Accion 2'}
     visualize.draw_net(config, genome, 
                       filename=os.path.join(output_dir, 'red_neuronal'),
                       node_names=node_names)
